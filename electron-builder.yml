@@ -138,10 +138,16 @@ linux:
       # 让桌面环境正确关联 .md 文件
       MimeType: text/markdown;
 
-# 自动更新元数据。
-# provider 用 generic：不绑定某个代码托管平台，指向自建静态目录即可，
-# 将来换到 GitHub Releases 只需改这一处。
-publish:
-  - provider: generic
-    url: https://updates.example.com/typeflow
-    channel: latest
+# 自动更新：**已移除**。
+#
+# 原因不是功能不好，而是它在当前分发方式下不可能工作：
+#  - macOS 的 electron-updater 要求应用**已签名**，未签名会报
+#    "Could not get code signature for running application"；
+#  - 免费开源的 GitHub 分发不签名（公证需要 $99/年开发者会员），
+#    因此自动更新必然失败。
+#
+# 移除了 `publish` 配置后，打包不再生成 `app-update.yml`，
+# `hasUpdateConfig()` 返回 false，更新路径整体走"不可用"分支——
+# 比烤进一个指向不存在域名的配置、让用户看到网络错误要诚实得多。
+#
+# 将来若要恢复：重新加上 publish 段（或 provider: github），并完成代码签名。

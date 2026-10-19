@@ -1,0 +1,75 @@
+# 发布：打 tag 即构建并上传 macOS 产物
+#
+# 设计原则：
+#  - **只做构建与上传**，验证交给 verify.yml（那个工作流跑三平台矩阵 + 真实 Electron 自检）。
+#    发布流程里混入完整验证会让一次发布耗时半小时，且失败时不知道是代码问题还是发布问题。
+#  - **不签名、不公证**。未签名应用能运行，只是首次打开需要用户手动放行（README 已说明）。
+#  - 产物只上传 zip：macOS 上的 zip 是唯一能被用户直接解压运行的形式，
+#    DMG 在有签名时才有意义（未签名 DMG 同样会被 Gatekeeper 拦，且多一层挂载步骤）。
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # 允许手动触发，便于在正式打 tag 前先验证一次发布链路
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    name: build macOS
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # 必须用 ci 而不是 install：发布产物应当由锁文件唯一确定
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and build
+        run: npm run typecheck && npm run build
+
+      # 两个架构分别构建。
+      # arm64 与 x64 分开出包而不是做 universal：universal 会让体积翻倍到约 200 MB，
+      # 而用户下载哪一个完全由机器决定，没有兼容性收益。
+      - name: Package (arm64)
+        run: npx electron-builder --mac zip --arm64 --publish never
+
+      - name: Package (x64)
+        run: npx electron-builder --mac zip --x64 --publish never
+
+      - name: List artifacts
+        run: ls -lh release/*.zip
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.zip
+          draft: true
+          generate_release_notes: true
+          body: |
+            ## 安装
+
+            下载与你机器匹配的 zip，解压后把 `TypeFlow.app` 拖进「应用程序」。
+
+            - Apple Silicon（M 系列）：`*-arm64-mac.zip`
+            - Intel：`*-x64-mac.zip`
+
+            ## 首次打开被拦住？
+
+            本版本**未做代码签名**，macOS 会提示「无法验证开发者」或「已损坏」。任选一种：
+
+            1. 右键点击 `TypeFlow.app` → 选择「打开」→ 弹窗中再点一次「打开」
+            2. `xattr -dr com.apple.quarantine /Applications/TypeFlow.app`
+            3. 双击一次让系统拦截 → 系统设置 → 隐私与安全性 → 「仍要打开」
+
+            自己编译也可以，且不需要绕过 Gatekeeper：见 README。

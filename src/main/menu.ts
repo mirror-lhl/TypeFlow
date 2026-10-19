@@ -213,10 +213,6 @@ function buildMenu(): Menu {
           click: () => void shell.openExternal('https://commonmark.org/help/')
         },
         {
-          label: t.checkForUpdates,
-          click: () => send('help:check-for-updates')
-        },
-        {
           label: t.resetUi,
           click: () => send('help:reset-ui')
         },

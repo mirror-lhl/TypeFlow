@@ -1,6 +1,44 @@
 # TypeFlow
 
-一个全新实现的 Markdown 编辑器（Electron + ProseMirror）。**L0–L5 全部完成**：可编辑、可搜索、可导出、可分发。Mac App Store 上架的代码与素材已就绪，等证书与账号。
+一个本地优先的 Markdown 编辑器：所见即所得 + 源码双模式、公式、代码高亮、表格、图片粘贴、PDF / HTML 导出。
+
+**免费开源 · MIT** ｜ macOS（Apple Silicon / Intel）｜ Electron + ProseMirror
+
+![TypeFlow 主界面](docs/screenshots/mac-1440x900.png)
+
+> 这是一个个人项目，不是商业产品。它把"一个编辑器能有多可靠"当成目标来写：
+> 全部断言都在**真实 Electron 进程**里跑，而不是对着 mock 断言。
+
+## 下载安装
+
+到 [Releases](../../releases) 下载最新的 `TypeFlow-<version>-arm64-mac.zip`（Apple Silicon）
+或 `x64-mac.zip`（Intel），解压后把 `TypeFlow.app` 拖进「应用程序」。
+
+### 首次打开被 macOS 拦住？
+
+这个应用**没有做代码签名与公证**（需要 $99/年 的 Apple 开发者会员，本项目不做），
+所以首次打开会遇到「无法验证开发者」或「已损坏」。三种办法任选：
+
+```bash
+# 方法一：右键点击 TypeFlow.app → 选择「打开」→ 在弹窗中再点一次「打开」
+
+# 方法二：移除下载隔离标记（等价于告诉系统"这个文件我信任"）
+xattr -dr com.apple.quarantine /Applications/TypeFlow.app
+
+# 方法三：系统设置 → 隐私与安全性 → 底部「仍要打开」
+```
+
+**方法三最稳妥**：先双击一次让系统弹出拦截，然后去设置里放行。
+
+### 自己编译（可选，且不需要绕过 Gatekeeper）
+
+```bash
+npm install      # Electron 二进制下载失败见「环境问题」
+npm run build
+npm run pack:open
+```
+
+自己编译出来的应用没有 quarantine 标记，打开不会拦。
 
 **可编辑**：Markdown（`.md` `.markdown` `.mdown` `.mkd` `.mdx`）与纯文本 `.txt`。
 两者共用同一套打开/保存/搜索/文件树能力，区别只在编辑表面——
@@ -12,13 +50,15 @@ Markdown 可切所见即所得，`.txt` 恒为源码模式且逐字保存（原�
 不挂编辑内核、不进搜索索引、保存/导出/模式切换/撤销等命令一律拦截。
 实现与安全边界见「只读查看器」。
 
-## 快速开始
+## 从源码运行
 
 ```bash
-npm install                      # Electron 二进制下载失败见"环境问题"
+npm install                      # Electron 二进制下载失败见「环境问题」
 npm run dev                      # 开发模式（热更新）
 npm run build && npm start       # 生产模式启动
 ```
+
+需要 Node 20+。
 
 ## 验证
 
@@ -40,6 +80,9 @@ npm run verify:all               # 一条命令跑完全部验证（推荐）
 `verify:all` 全程 8.8s（三次 8.95 / 8.68 / 8.89）。
 
 `npm run smoke` 会校验构建产物是否早于源码，防止验证到过期代码。
+
+发布：推一个 `v*` 标签即可触发 [release.yml](.github/workflows/release.yml)，
+在 macOS runner 上分别构建 arm64 / x64 的 zip 并附到草稿 Release。
 
 ## 架构
 
@@ -261,14 +304,14 @@ open "release/mac-arm64/TypeFlow.app"
 # 未签名应用若被 Gatekeeper 拦下：右键 → 打开 → 弹窗中再点一次"打开"
 ```
 
-期望自检输出 `断言 231 项，失败 0 项`。
-签名、公证与自动更新的完整流程见 [docs/L5-RELEASE.md](docs/L5-RELEASE.md)。
+期望自检输出 `断言 257 项，失败 0 项`。
+> **关于自动更新**：本项目**不含**自动更新。macOS 上的 electron-updater 要求应用已签名，
+> 而免费分发不做签名，因此这条路径必然失败。新版本请到 Releases 页面手动下载。
 
 | 能力 | 说明 |
 |---|---|
 | 三平台打包 | electron-builder，配置见 `electron-builder.yml` |
-| 界面语言 | 菜单「视图 → 切换界面语言」；165 键 × 中英双语 |
-| 自动更新 | 静默检查、状态栏提示、用户决定何时重启 |
+| 界面语言 | 菜单「视图 → 切换界面语言」；210 键 × 中英双语 |
 | 重置界面设置 | 菜单「帮助 → 重置界面设置…」；清空主题/排版/语言/布局，**不影响最近文件** |
 | CI | 三平台矩阵：验证 + 打包（`.github/workflows/verify.yml`） |
 
@@ -281,41 +324,6 @@ DMG **98.1 MB**（`release/TypeFlow-0.1.0-arm64.dmg`，102,824,855 字节），
 其中只读查看器占约 6.5 MB：pdf.js 主体 1,027,255 字节 + worker 2,348,879 字节
 （两者都是动态 import 出来的独立 chunk，不打开 PDF 就不加载）
 + `out/renderer/pdfjs/` 3.1 MB（cMap、标准字体，以及 JPEG2000 / JBIG2 的纯 JS 解码器）。
-
-### Mac App Store 上架（L5 之后的分发线）
-
-商店版与站外版是**两套完全分离的构建**：站外用 `build/entitlements.mac.plist`（无沙箱），
-商店用 `build/entitlements.mas.plist`（App Sandbox + Electron 必需的 JIT 项），
-Helper 进程经 `entitlements.mas.inherit.plist` 继承沙箱、不额外扩权。
-
-```bash
-# 本地产出未签名 MAS 应用 → release/mas-dev-arm64/mas-arm64/TypeFlow.app（实测 241 MB）
-npx electron-builder --mac mas --dir --arm64 -c.directories.output=release/mas-dev-arm64
-```
-
-`--mas` 不是 CLI 参数（electron-builder 26.15.3 会报 `Unknown argument: mas`）：
-`mas` 是 `--mac` 的目标名。与站外版对照可确认用的确实是 MAS 运行时——
-两者 `Electron Framework` 二进制 SHA256 不同。
-
-沙箱下进程对文件系统**没有任何默认权限**（除用户当次经系统对话框选中的文件），
-而 TypeFlow 有三项能力必须越出这个范围：启动时重开最近文档、图片写入文档同目录
-`assets/`、工作区目录树 / 搜索 / 监听跨重启保留。解法是苹果的安全作用域书签
-（security-scoped bookmarks），实现在 `src/main/mas-access.ts`，接入打开/保存、
-工作区、图片、导出四条 IPC 路径，并在应用启动时恢复、退出时释放。
-该模块只在 `process.mas === true` 时生效，**站外构建行为完全不变**。
-
-商店素材已就位：`store/listing.md`（中英描述、关键词、审核备注、4+ 分级）、
-`store/privacy-policy.md`、中英两套 1440×900 截图（`scripts/capture-screenshots.mjs`
-一次跑出，使用隔离 userData）、`build/icon-store-1024.png`（无透明通道）。
-
-**当前状态：代码与素材就绪，提交被证书与账号阻塞。** 还缺 "3rd Party Mac Developer"
-证书与 provisioning profile、`.pkg` 产物，以及 `store/listing.md` 末尾列出的 5 项商务确认
-（价格点、销售地区、Small Business Program、支持/营销 URL 托管、站外免费版与商店付费版关系）。
-
-另有一处**验证缺口**：自检在 `ELECTRON_SMOKE_TEST=1` 下会直接放行沙箱授权检查
-（否则每次写操作都会弹无人点击的系统对话框导致自检挂起），因此书签恢复路径
-目前没有任何自动化覆盖，只能真机验证。完整流程见
-[docs/L5-RELEASE.md](docs/L5-RELEASE.md) 第六节。
 
 ### L4 能力
 
@@ -413,7 +421,7 @@ PROXY=http://127.0.0.1:7891 ELECTRON_VERSION=33.4.11 ./scripts/fetch-electron-bi
 - [docs/L3-ACCEPTANCE.md](docs/L3-ACCEPTANCE.md) — L3 验收报告、CSP 兼容性验证与 11 个缺陷复盘
 - [docs/L4-ACCEPTANCE.md](docs/L4-ACCEPTANCE.md) — L4 验收报告、PDF 字体嵌入验证与 5 个缺陷复盘
 - [docs/L5-ACCEPTANCE.md](docs/L5-ACCEPTANCE.md) — L5 验收报告、打包体积分析与性能度量（文末有验收后变更）
-- [docs/L5-RELEASE.md](docs/L5-RELEASE.md) — **发布指南**：签名、公证、自动更新、CI、Mac App Store 上架
+- [docs/L5-RELEASE.md](docs/L5-RELEASE.md) — 发布指南（签名 / 公证 / CI），供想自行签名的使用者参考
 
 | 级别 | 内容 | 预算 | 状态 |
 |---|---|---|---|
@@ -422,8 +430,15 @@ PROXY=http://127.0.0.1:7891 ELECTRON_VERSION=33.4.11 ./scripts/fetch-electron-bi
 | L2 | 文件树 / 标签页 / 搜索 / 大纲 | 1.4 M | ✅ 完成 |
 | L3 | 公式 / 代码高亮 / 表格 / 图片 | 0.9 M | ✅ 完成 |
 | L4 | HTML/PDF 导出 + 主题系统 | 0.6 M | ✅ 完成 |
-| L5 | 打包 / i18n / 性能 / 自动更新 / CI | 0.7 M | ✅ 完成 |
+| L5 | 打包 / i18n / 性能 / CI | 0.7 M | ✅ 完成 |
 | L5+ | 纯文本 `.txt`：钉在源码模式、逐字保存 | 未编列 | ✅ 完成 |
 | L5+ | 只读查看 PDF / HTML / 图片：CSP 与安全基线零放宽 | 未编列 | ✅ 完成 |
 | L5+ | Finder 文件关联（`fileAssociations` + `open-file`） | 未编列 | ⬜ 未做 |
-| L5+ | Mac App Store 上架：沙箱授权 / 商店素材 | 未编列 | 🔶 代码与素材就绪，待证书与账号 |
+| L5+ | Mac App Store 上架 | 未编列 | ⬜ 不在计划内（改为免费开源分发） |
+
+## 许可证
+
+[MIT](LICENSE) © 2026 Mirror吕洪磊
+
+第三方依赖保持各自许可证：ProseMirror（MIT）、KaTeX（MIT）、highlight.js（BSD-3-Clause）、
+pdf.js（Apache-2.0）、markdown-it（MIT）。

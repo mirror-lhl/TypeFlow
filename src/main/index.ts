@@ -12,7 +12,7 @@ import { registerAssetHandlers } from './asset-io'
 import { registerViewerResourceHandlers } from './viewer-resources'
 import { registerExportHandlers } from './export-ipc'
 import { restoreBookmarks, stopAllBookmarks } from './mas-access'
-import { registerUpdateHandlers, scheduleStartupUpdateCheck } from './auto-update'
+import { registerUpdateHandlers } from './auto-update'
 import {
   addRecentFile,
   clearRecentFiles,
@@ -322,7 +322,13 @@ app.whenReady().then(() => {
   installApplicationMenu()
   focusMainWindow(createMainWindow())
   // 延迟检查更新：不拖慢首屏，也不打断用户
-  scheduleStartupUpdateCheck()
+  /**
+   * 不再安排启动时的更新检查。
+   *
+   * 免费/开源分发未做代码签名，而 macOS 的自动更新要求签名，
+   * 因此这条路径在任何情况下都会失败。保留调用只会让后台白跑一次网络请求。
+   * IPC 与状态机本身保留（菜单入口已移除），将来签名后可重新启用。
+   */
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
