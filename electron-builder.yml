@@ -81,6 +81,11 @@ mac:
 # 届时移除 identity: null 并提供证书（见 docs/L5-RELEASE.md）。
 mas:
   entitlements: build/entitlements.mas.plist
+  # App Store Connect 要求 CFBundleVersion **单调递增**，且不能与已上传的重复。
+  # 版本号（package.json 的 version）是市场版本，两者独立：
+  # 同一市场版本重新上传也必须提高构建号。
+  # 发布脚本会把它改成递增的数字；这里给一个基准值。
+  bundleVersion: "1"
   entitlementsInherit: build/entitlements.mas.inherit.plist
   # mas 构建单独解析平台配置，语言声明这里也保留一份，避免依赖继承行为
   extendInfo:

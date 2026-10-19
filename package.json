@@ -23,7 +23,9 @@
     "pack:all": "npm run build && electron-builder --mac --win --linux",
     "pack:verify": "node scripts/package-and-verify.mjs",
     "pack:verify:zip": "node scripts/package-and-verify.mjs --zip",
-    "pack:open": "node scripts/package-and-verify.mjs --open"
+    "pack:open": "node scripts/package-and-verify.mjs --open",
+    "verify:mas": "node scripts/verify-mas.mjs",
+    "verify:mas:static": "node scripts/verify-mas.mjs --static"
   },
   "devDependencies": {
     "@types/katex": "^0.16.8",

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { existsSync } from 'node:fs'
+import { messages } from '../shared/i18n'
 import { join } from 'node:path'
 import { CHANNELS } from './ipc-channels'
 import type { UpdateState } from '../shared/ipc'
@@ -102,10 +103,11 @@ async function loadUpdater(): Promise<typeof import('electron-updater').autoUpda
 
 /** 更新不可用时的可读原因，用于区分"开发态"与"该构建未含更新配置"。 */
 function unavailableReason(): string {
-  if (process.mas === true) return 'App Store 版由 App Store 统一更新'
-  if (!app.isPackaged) return '开发模式不支持自动更新'
-  if (!hasUpdateConfig()) return '该构建未包含更新配置（需使用 dmg / zip 等可发布目标打包）'
-  return '自动更新模块不可用'
+  const t = messages().update
+  if (process.mas === true) return t.masManaged
+  if (!app.isPackaged) return t.devMode
+  if (!hasUpdateConfig()) return t.missingConfig
+  return t.moduleUnavailable
 }
 
 async function checkForUpdates(): Promise<UpdateState> {

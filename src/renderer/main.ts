@@ -4347,6 +4347,34 @@ async function runSmokeTest(): Promise<void> {
     }
 
     /**
+     * 商店版与站外版共用同一份代码，差异全靠 `process.mas` 驱动。
+     *
+     * 这里断言"标记与行为一致"：标记为商店版时，自更新必须被禁用并给出
+     * 商店口径的原因；标记为站外版时不能误报成商店版。
+     *
+     * 同一个断言要能同时跑在两种构建上——写死期望值会让另一半构建必然失败。
+     */
+    {
+      const updateState = await api.update.check()
+      const isMas = api.smoke.masBuild
+
+      if (isMas) {
+        check(
+          '商店版禁用自更新并给出商店口径原因',
+          updateState.status === 'unavailable' &&
+            (updateState.message ?? '').includes('App Store'),
+          `${updateState.status} / ${JSON.stringify(updateState.message ?? '')}`
+        )
+      } else {
+        check(
+          '站外版未被误判为商店构建',
+          isMas === false && updateState.status === 'unavailable',
+          `masBuild=${isMas} 状态=${updateState.status}`
+        )
+      }
+    }
+
+    /**
      * 语言菜单项必须可以**反复**切换。
      *
      * 覆盖用户报告："视图 → 切换界面语言，只有一次有效，后面点击无效"。

@@ -156,6 +156,14 @@ export interface Messages {
     showingFirst: string
     limitReached: string
   }
+  update: {
+    /** App Store 版：更新由商店统一分发 */
+    masManaged: string
+    devMode: string
+    missingConfig: string
+    moduleUnavailable: string
+    checking: string
+  }
   status: {
     ready: string
     openedFile: string
@@ -372,6 +380,13 @@ const zhCN: Messages = {
     showingFirst: '显示前',
     limitReached: '（已达上限，结果可能不完整）'
   },
+  update: {
+    masManaged: 'App Store 版由 App Store 统一更新',
+    devMode: '开发模式不支持自动更新',
+    missingConfig: '该构建未包含更新配置（需使用 dmg / zip 等可发布目标打包）',
+    moduleUnavailable: '自动更新模块不可用',
+    checking: '正在检查更新…'
+  },
   status: {
     ready: '就绪',
     openedFile: '已打开',
@@ -586,6 +601,13 @@ const enUS: Messages = {
     fileCount: 'files',
     showingFirst: 'Showing first',
     limitReached: ' (limit reached, results may be incomplete)'
+  },
+  update: {
+    masManaged: 'App Store builds are updated through the App Store',
+    devMode: 'Auto-update is unavailable in development mode',
+    missingConfig: 'This build has no update configuration (package with dmg / zip to enable it)',
+    moduleUnavailable: 'The auto-update module is unavailable',
+    checking: 'Checking for updates…'
   },
   status: {
     ready: 'Ready',

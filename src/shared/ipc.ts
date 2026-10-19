@@ -354,6 +354,14 @@ export interface TypeFlowApi {
   /** 仅自检模式使用：渲染层完成端到端校验后通知主进程退出。 */
   smoke: {
     readonly enabled: boolean
+    /**
+     * 当前是否是 Mac App Store 构建（主进程的 `process.mas`）。
+     *
+     * 商店版与站外版共用同一份代码，差异全部由这个标记驱动：
+     * 沙箱书签、自更新禁用、根路径。自检必须能区分两者，
+     * 否则"商店版走了站外分支"这类错误无法被发现。
+     */
+    readonly masBuild: boolean
     /** 仅自检模式下由主进程注入的可写临时目录，用于验证真实落盘 */
     readonly tempDir: string
     /** init() 跑完即上报，主进程据此判断 preload 桥与渲染层是否真的就绪 */

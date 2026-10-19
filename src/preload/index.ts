@@ -181,6 +181,7 @@ const api: TypeFlowApi = {
   smoke: {
     // 环境变量经主进程注入渲染层进程，preload 可直接读取
     enabled: process.env.ELECTRON_SMOKE_TEST === '1',
+    masBuild: process.env.ELECTRON_MAS_BUILD === '1',
     tempDir: process.env.ELECTRON_SMOKE_TMPDIR ?? '',
     reportReady: (): void => {
       ipcRenderer.send(CHANNELS.smokeRendererReady)

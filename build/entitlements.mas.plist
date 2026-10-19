@@ -17,5 +17,16 @@
   <!-- 用户经系统对话框选中的文件/文件夹可读写；其余访问走安全作用域书签 -->
   <key>com.apple.security.files.user-selected.read-write</key>
   <true/>
+  <!--
+    App 作用域书签：**持久化访问授权的必要 entitlements**。
+
+    没有它，`dialog.showOpenDialog` 返回的 bookmarks 在下次启动时无法解析，
+    `app.startAccessingSecurityScopedResource()` 会失败——表现为
+    "重启后打不开最近文档 / 无法写 assets/ / 工作区目录树失效"，
+    也就是 mas-access.ts 的整套授权机制形同虚设。
+    沙箱里这个能力必须显式声明，不会被其它键隐含。
+  -->
+  <key>com.apple.security.files.bookmarks.app-scope</key>
+  <true/>
 </dict>
 </plist>

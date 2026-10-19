@@ -286,6 +286,8 @@ app.whenReady().then(() => {
 
   // 自检模式下把可写临时目录注入渲染层，用于验证真实落盘
   if (isSmokeTest) {
+    // 让 preload 能读到"这是不是商店版构建"：process.mas 只在主进程可用
+    process.env.ELECTRON_MAS_BUILD = process.mas === true ? '1' : '0'
     process.env.ELECTRON_SMOKE_TMPDIR = mkdtempSync(join(tmpdir(), 'typeflow-smoke-'))
     console.log(`[typeflow] smoke temp dir: ${process.env.ELECTRON_SMOKE_TMPDIR}`)
   }
