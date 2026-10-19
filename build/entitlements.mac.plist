@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    macOS 硬化运行时（hardenedRuntime）所需的 entitlements。
+
+    这些是 Electron 应用的**最小必需集**：
+    V8 需要 JIT，因此必须允许 unsigned executable memory 与 JIT；
+    Electron 的部分框架以库形式加载，需要 disable-library-validation。
+    缺少任何一项，签名后的应用会在启动时崩溃——而这个问题在未签名构建里看不到。
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- 用户通过"打开文件夹"访问任意位置，因此需要用户选择的文件读写权限 -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>

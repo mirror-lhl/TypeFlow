@@ -1,0 +1,1753 @@
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Courier New', monospace;
+  --font-content: var(--font-mono);
+
+  --bg: #ffffff;
+  --bg-subtle: #f7f7f8;
+  --bg-raised: #ffffff;
+  --border: #e4e4e7;
+  --text: #18181b;
+  --text-muted: #71717a;
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.12);
+  --danger: #dc2626;
+
+  /*
+   * 行内代码与选区必须有**明显不同**的背景色。
+   *
+   * 原先进两者都用 --accent-soft，导致用户无法区分"这是代码"
+   * 与"这是被选中的内容"——点击搜索结果后看到别处的行内代码，
+   * 会误以为"高亮跑到别的地方去了"。
+   *
+   * 分工：行内代码用中性灰（读作"标记/代码"），
+   * 选区用带透明度的强调蓝（读作"被选中"）。
+   */
+  --code-inline-bg: rgba(120, 120, 130, 0.14);
+  --selection-bg: rgba(37, 99, 235, 0.28);
+}
+
+html[data-theme='dark'] {
+  --bg: #1c1c1f;
+  --bg-subtle: #232327;
+  --bg-raised: #28282d;
+  --border: #35353b;
+  --text: #e8e8ea;
+  --text-muted: #9a9aa5;
+  --accent: #60a5fa;
+  --accent-soft: rgba(96, 165, 250, 0.16);
+  --danger: #f87171;
+  --code-inline-bg: rgba(160, 160, 175, 0.2);
+  --selection-bg: rgba(96, 165, 250, 0.34);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ---------- 工具栏 ---------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  /*
+   * 允许换行。
+   *
+   * 曾经设为 `nowrap + overflow-x: auto` 加隐藏滚动条，理由是"换行会让高度变化、
+   * 影响依赖工具栏高度的定位"。但查找框后来改为锚定在**编辑区**内部，
+   * 那个顾虑已经不存在了。
+   *
+   * 而 nowrap 的代价是真实的：窗口稍窄时右侧按钮被裁掉且**看不见滚动条**，
+   * 用户以为按钮丢了（英文标签更长，更容易触发）。
+   * 换行会让工具栏变高，但所有按钮始终可达。
+   */
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+/* 按钮组不参与压缩，否则会被压成很窄的条 */
+.toolbar__group {
+  flex: 0 0 auto;
+}
+
+.toolbar__group {
+  display: flex;
+  gap: 4px;
+}
+
+.toolbar__spacer {
+  flex: 1;
+}
+
+.toolbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 40%;
+}
+
+.doc-name {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.dirty-dot {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+button {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+button:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+button:active {
+  transform: translateY(0.5px);
+}
+
+button[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ---------- 编辑区布局 ---------- */
+
+/*
+ * 三层正交控制，互不干扰：
+ *   data-view = 布局（编辑区 / 预览区 如何分配空间）
+ *   data-mode = 编辑模式（所见即所得 / 源码）
+ * 分开表达是因为二者可组合：源码模式同样可以分屏看预览。
+ */
+.editor-area {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  background: var(--bg);
+  /* 查找框的定位上下文：编辑区在标签栏之下，锚在这里就不会压住标签或工具栏 */
+  position: relative;
+}
+
+.pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pane--editor {
+  flex: 1 1 50%;
+  min-height: 0;
+  position: relative;
+}
+
+.pane--preview {
+  flex: 1 1 50%;
+  border-left: 1px solid var(--border);
+  background: var(--bg-subtle);
+  position: relative;
+}
+
+/*
+ * 显示区开关：浮在内容区右上角的小圆片。
+ * 分屏 / 仅预览时在显示区里，仅编辑区时在编辑区里——
+ * 两种情况下它都落在同一个屏幕角落，位置不跳。
+ * 默认半透明：它压在正文上，安静一点才不像污渍；悬停时变实。
+ */
+.pane-toggle {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 5;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  opacity: 0.72;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.pane-toggle:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
+.pane--preview .pane-toggle {
+  display: flex;
+}
+
+.editor-area[data-view='source'] .pane--editor .pane-toggle {
+  display: flex;
+}
+
+.editor-area[data-view='source'] .pane--preview {
+  display: none;
+}
+
+.editor-area[data-view='preview'] .pane--editor {
+  display: none;
+}
+
+.editor-area[data-view='preview'] .pane--preview {
+  flex: 1 1 100%;
+  border-left: none;
+}
+
+/* ---------- 只读查看器（PDF / HTML / 图片） ---------- */
+
+/* 查看会话下两个 pane 都不适用：没有源码可编辑，预览也不再是"另一半"。 */
+.editor-area[data-view='viewer'] .pane {
+  display: none;
+}
+
+.viewer {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.viewer[hidden] {
+  display: none;
+}
+
+.viewer-pdf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+}
+
+/* 占位块与页面同尺寸：PDF 页面本身就是白的，边框和投影用来分隔页与页 */
+.viewer-pdf__page {
+  display: flex;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+}
+
+.viewer-pdf__page canvas {
+  display: block;
+}
+
+.viewer-image {
+  min-height: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg-subtle);
+}
+
+.viewer-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* 净化后的 HTML 挂在 shadow root 里，宿主只负责撑满 */
+.viewer-html {
+  display: block;
+  min-height: 100%;
+}
+
+.wysiwyg-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.wysiwyg-host[hidden],
+.editor[hidden] {
+  display: none;
+}
+
+.editor {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  padding: 24px 28px 40vh;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-content);
+  font-size: 14.5px;
+  line-height: 1.75;
+  tab-size: 2;
+}
+
+/* ---------- 所见即所得编辑区 ---------- */
+
+.typeflow-editor {
+  flex: 1;
+  min-height: 0;
+  padding: 24px 28px 40vh;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-content);
+  font-size: 14.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  caret-color: var(--accent);
+}
+
+.typeflow-editor > * + * {
+  margin-top: 0.55em;
+}
+
+.typeflow-editor h1,
+.typeflow-editor h2,
+.typeflow-editor h3,
+.typeflow-editor h4,
+.typeflow-editor h5,
+.typeflow-editor h6 {
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 1.1em 0 0.5em;
+}
+
+.typeflow-editor h1 {
+  font-size: 1.65em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.typeflow-editor h2 {
+  font-size: 1.4em;
+}
+
+.typeflow-editor h3 {
+  font-size: 1.2em;
+}
+
+.typeflow-editor h4,
+.typeflow-editor h5,
+.typeflow-editor h6 {
+  font-size: 1.05em;
+}
+
+.typeflow-editor blockquote {
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text-muted);
+}
+
+.typeflow-editor ul,
+.typeflow-editor ol {
+  margin: 0;
+  padding-left: 1.6em;
+}
+
+.typeflow-editor li {
+  margin: 0.15em 0;
+}
+
+.typeflow-editor li > p {
+  margin: 0;
+}
+
+/* 列表标记用强调色，让层级在长文档里一眼可辨 */
+.typeflow-editor ul li::marker,
+.typeflow-editor ol li::marker {
+  color: var(--accent);
+}
+
+.typeflow-editor pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  white-space: pre;
+}
+
+.typeflow-editor pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 1em;
+}
+
+.typeflow-editor code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--code-inline-bg);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.typeflow-editor hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.1em 0;
+}
+
+.typeflow-editor a {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.typeflow-editor s {
+  color: var(--text-muted);
+}
+
+/* ProseMirror 的选区与间隙光标 */
+.typeflow-editor ::selection {
+  background: var(--selection-bg);
+}
+
+.typeflow-editor .ProseMirror-gapcursor::after {
+  border-top-color: var(--accent);
+}
+
+.editor-placeholder {
+  color: var(--text-muted);
+  pointer-events: none;
+  position: absolute;
+}
+
+/* ---------- 工具栏 ---------- */
+
+.toolbar__group--format button {
+  min-width: 30px;
+  padding: 5px 7px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.toolbar__group--format button.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.toolbar__group--format[data-disabled='true'] {
+  opacity: 0.45;
+}
+
+.toolbar__divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background: var(--border);
+}
+
+.preview {
+  /*
+   * 滚动容器是 article 自己，而不是外层 pane：
+   * 显示区开关要浮在 pane 右上角不随内容滚走，pane 就不能同时是滚动容器
+   * （绝对定位的子元素会跟着滚动内容一起跑）。
+   */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 28px 40vh;
+  font-family: var(--font-content);
+  font-size: 14.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+
+/* ---------- 预览内的 Markdown 元素 ---------- */
+
+.md-heading {
+  margin: 18px 0 8px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.md-heading--1 {
+  font-size: 1.65em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.md-heading--2 {
+  font-size: 1.4em;
+}
+
+.md-heading--3 {
+  font-size: 1.2em;
+}
+
+.md-heading--4,
+.md-heading--5,
+.md-heading--6 {
+  font-size: 1.05em;
+}
+
+.md-paragraph {
+  margin: 2px 0;
+}
+
+.md-quote {
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text-muted);
+}
+
+.md-list-item {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+.md-list-marker {
+  flex: 0 0 auto;
+  min-width: 1.2em;
+  color: var(--accent);
+}
+
+.md-list-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.md-code-block {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.md-code-block pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  white-space: pre;
+}
+
+.md-code-lang {
+  padding: 3px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.preview code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--code-inline-bg);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.preview hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+
+/* ---------- 状态栏 ---------- */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border);
+  user-select: none;
+}
+
+.statusbar__spacer {
+  flex: 1;
+}
+
+.status-chip {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.status-message[data-tone='warn'] {
+  color: #b45309;
+}
+
+.status-message[data-tone='error'] {
+  color: var(--danger);
+}
+
+/* ---------- 查找条 ---------- */
+
+.finder {
+  /*
+   * 绝对定位在**编辑区**内。
+   *
+   * 演进过程：`position: fixed; top: 52px`（假设工具栏高度固定）
+   * → 内容区顶部（压住了标签栏）→ 编辑区内部（正确）。
+   *
+   * 三次尝试的区别不在数值，而在"锚在哪一层容器"：
+   * 编辑区是唯一一个上方确实没有其它 UI 的容器。
+   */
+  position: absolute;
+  top: 8px;
+  /* 右上角让给显示区开关（pane-toggle 占 right 12..38），查找条往左挪避开它 */
+  right: 52px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+/* 作者 display 会覆盖 UA 的 [hidden] 规则，必须显式补一条，否则查找条常驻 */
+.finder[hidden] {
+  display: none;
+}
+
+.finder__input {
+  width: 220px;
+  padding: 5px 8px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.finder__input:focus {
+  border-color: var(--accent);
+}
+
+.finder__count {
+  min-width: 42px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.finder__button {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* ================================================================== *
+ * L2：工作台布局（侧边栏 + 标签栏 + 面板）
+ * ================================================================== */
+
+.workbench {
+  --sidebar-width: 260px;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.workbench[data-sidebar='hidden'] .sidebar,
+.workbench[data-sidebar='hidden'] .sidebar-resizer {
+  display: none;
+}
+
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* ---------- 侧边栏 ---------- */
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-subtle);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-resizer {
+  width: 4px;
+  flex: 0 0 auto;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.sidebar-resizer:hover {
+  background: var(--accent-soft);
+}
+
+.sidebar__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar__tab {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+}
+
+.sidebar__tab:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.sidebar__tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.sidebar__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.sidebar__panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar__panel[hidden] {
+  display: none;
+}
+
+.sidebar__path {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.sidebar__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 0 12px;
+}
+
+.panel-empty {
+  margin: 12px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.panel-empty[data-tone='warn'] {
+  color: #b45309;
+}
+
+.panel-empty[data-tone='error'] {
+  color: var(--danger);
+}
+
+/* ---------- 文件树 ---------- */
+
+.tree-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  padding-left: calc(6px + var(--tree-depth, 0) * 12px);
+  min-height: 24px;
+}
+
+.tree-row:hover {
+  background: var(--accent-soft);
+}
+
+.tree-row.is-active {
+  background: var(--accent-soft);
+}
+
+.tree-row.is-muted .tree-label {
+  color: var(--text-muted);
+}
+
+.tree-row--pending {
+  padding-left: 10px;
+  gap: 6px;
+}
+
+.tree-pending-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tree-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 12.5px;
+}
+
+/* 省略号必须落在名字 span 上：label 本身是 flex 容器，直接加 ellipsis 不生效 */
+.tree-label__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-icon {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 文件夹着强调色、文件着弱化灰，两者一眼可分 */
+.tree-icon--folder,
+.tree-icon--folder-open {
+  color: var(--accent);
+}
+
+.tree-icon--file,
+.tree-icon--view {
+  color: var(--text-muted);
+}
+
+.tree-label:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.tree-actions {
+  display: none;
+  gap: 1px;
+  flex: 0 0 auto;
+}
+
+.tree-row:hover .tree-actions {
+  display: flex;
+}
+
+.tree-action {
+  padding: 1px 5px;
+  font-size: 10px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.tree-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  outline: none;
+}
+
+/* ---------- 大纲 ---------- */
+
+.outline-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.outline-item {
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 10px 4px calc(10px + var(--outline-depth, 0) * 14px);
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.outline-item:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.outline-item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.outline-item--l1 {
+  font-weight: 600;
+}
+
+.outline-item--l2 {
+  font-weight: 500;
+}
+
+/* ---------- 搜索面板 ---------- */
+
+.search-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.search-case {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.search-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+}
+
+.search-count {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.search-match {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 3px 10px;
+  font-size: 11.5px;
+}
+
+.search-match:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.search-line {
+  flex: 0 0 28px;
+  text-align: right;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.search-snippet {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- 内容区与标签栏 ---------- */
+
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tab-bar {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tab-strip {
+  display: flex;
+  min-height: 30px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 200px;
+  border-right: 1px solid var(--border);
+  background: transparent;
+}
+
+.tab.is-active {
+  background: var(--bg);
+  border-bottom: 2px solid var(--accent);
+}
+
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 6px 4px 6px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab.is-active .tab-title {
+  color: var(--text);
+}
+
+.tab-title:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.tab-close {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  padding: 1px 6px;
+  margin-right: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.tab-close:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.tab.is-dirty .tab-close {
+  color: var(--accent);
+}
+
+.tab.is-dirty:hover .tab-close {
+  color: var(--text);
+}
+
+.tab.is-dirty:hover .tab-close::before {
+  content: '✕';
+}
+
+/* 脏标记悬停时换成关闭图标：位置不变，避免标题宽度跳动 */
+.tab.is-dirty:hover .tab-close {
+  font-size: 0;
+}
+
+.tab.is-dirty:hover .tab-close::before {
+  font-size: 10px;
+}
+
+/* ================================================================== *
+ * L3：数学公式
+ * ================================================================== */
+
+.math-node {
+  border-radius: 4px;
+  cursor: default;
+  transition: background 0.12s ease;
+}
+
+.math-node--inline {
+  display: inline-block;
+  padding: 0 2px;
+  vertical-align: baseline;
+}
+
+.math-node--block {
+  display: block;
+  padding: 6px 8px;
+  margin: 0.5em 0;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.math-node:hover {
+  background: var(--accent-soft);
+}
+
+.math-node.is-selected {
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+}
+
+.math-node.is-empty {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0 6px;
+  border: 1px dashed var(--border);
+}
+
+.math-node.is-empty::before {
+  content: 'fx ';
+  opacity: 0.6;
+}
+
+/* KaTeX 默认字号略小，与正文对齐 */
+.math-render .katex {
+  font-size: 1.05em;
+}
+
+.math-error {
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* 就地编辑 LaTeX 源码的输入框 */
+.math-input {
+  width: 100%;
+  min-width: 120px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  outline: none;
+}
+
+/* 预览区的公式与图片 */
+.preview .md-math-block {
+  display: block;
+  margin: 0.6em 0;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.preview .md-image {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 0.4em 0;
+}
+
+.preview .md-image-missing {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* ================================================================== *
+ * L3：代码块与语法高亮
+ * ================================================================== */
+
+.code-block {
+  margin: 0.5em 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.code-block__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.code-block__language {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 1px 2px;
+  cursor: pointer;
+  outline: none;
+}
+
+.code-block__language:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.code-block__code {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  line-height: 1.55;
+  white-space: pre;
+  tab-size: 2;
+  background: none;
+  padding: 0;
+}
+
+/*
+ * 高亮配色。
+ *
+ * 不用 highlight.js 自带主题文件：那些主题是写死的浅色/深色配色，
+ * 会把编辑器的明暗切换割裂。这里改用与编辑器同一套 CSS 变量，
+ * 两套主题自动一致。
+ */
+.hljs-comment,
+.hljs-quote {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-doctag,
+.hljs-name {
+  color: #a626a4;
+}
+
+html[data-theme='dark'] .hljs-keyword,
+html[data-theme='dark'] .hljs-selector-tag,
+html[data-theme='dark'] .hljs-literal,
+html[data-theme='dark'] .hljs-section,
+html[data-theme='dark'] .hljs-doctag,
+html[data-theme='dark'] .hljs-name {
+  color: #d9a0f0;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: #50a14f;
+}
+
+html[data-theme='dark'] .hljs-string,
+html[data-theme='dark'] .hljs-regexp,
+html[data-theme='dark'] .hljs-addition,
+html[data-theme='dark'] .hljs-attribute,
+html[data-theme='dark'] .hljs-meta .hljs-string {
+  color: #98c379;
+}
+
+.hljs-number,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: #986801;
+}
+
+html[data-theme='dark'] .hljs-number,
+html[data-theme='dark'] .hljs-variable,
+html[data-theme='dark'] .hljs-template-variable,
+html[data-theme='dark'] .hljs-type,
+html[data-theme='dark'] .hljs-selector-class,
+html[data-theme='dark'] .hljs-selector-attr,
+html[data-theme='dark'] .hljs-selector-pseudo {
+  color: #d19a66;
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-built_in,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #4078f2;
+}
+
+html[data-theme='dark'] .hljs-title,
+html[data-theme='dark'] .hljs-title.function_,
+html[data-theme='dark'] .hljs-built_in,
+html[data-theme='dark'] .hljs-symbol,
+html[data-theme='dark'] .hljs-bullet,
+html[data-theme='dark'] .hljs-link {
+  color: #61afef;
+}
+
+.hljs-attr,
+.hljs-property,
+.hljs-params {
+  color: #c18401;
+}
+
+html[data-theme='dark'] .hljs-attr,
+html[data-theme='dark'] .hljs-property,
+html[data-theme='dark'] .hljs-params {
+  color: #e5c07b;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* ================================================================== *
+ * L3：表格
+ * ================================================================== */
+
+.typeflow-editor table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  table-layout: fixed;
+  width: 100%;
+  overflow: hidden;
+}
+
+.typeflow-editor th,
+.typeflow-editor td {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  vertical-align: top;
+  position: relative;
+  min-width: 40px;
+}
+
+/* 表头用背景色而非加粗：加粗在中文里辨识度低，底色更直观 */
+.typeflow-editor th {
+  background: var(--bg-subtle);
+  font-weight: 600;
+  text-align: left;
+}
+
+.typeflow-editor th > p,
+.typeflow-editor td > p {
+  margin: 0;
+}
+
+/* 单元格选中态（拖拽或方向键扩展选区时） */
+.typeflow-editor .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+
+/* 列宽拖拽手柄 */
+.typeflow-editor .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.typeflow-editor.resize-cursor {
+  cursor: col-resize;
+}
+
+/* 空单元格也要有可见高度，否则用户点不到 */
+.typeflow-editor td:empty::after,
+.typeflow-editor th:empty::after {
+  content: '';
+  display: inline-block;
+  min-height: 1em;
+}
+
+/* ================================================================== *
+ * L3：图片
+ * ================================================================== */
+
+.image-node {
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 6px;
+  vertical-align: bottom;
+  line-height: 0;
+}
+
+.image-node img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  display: block;
+}
+
+.image-node.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 加载中与缺失态用文本占位而不是破图，用户能看出是路径问题还是文件丢失 */
+.image-node.is-pending,
+.image-node.is-missing {
+  line-height: 1.6;
+  padding: 4px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+
+.image-node.is-missing {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ================================================================== *
+ * L4：排版主题变体
+ *
+ * 与明暗主题正交：`data-theme` 管配色，`data-variant` 管排版。
+ * 分成两轴是因为用户会想要"深色 + 衬线阅读"这类组合，
+ * 若合成一个枚举会组合爆炸。
+ * ================================================================== */
+
+/* 衬线阅读：为长文阅读优化，中文用宋体族，西文用 Georgia */
+html[data-variant='serif'] {
+  --font-content: Georgia, 'Songti SC', 'SimSun', 'Source Han Serif SC', 'Noto Serif CJK SC', serif;
+}
+
+html[data-variant='serif'] .typeflow-editor,
+html[data-variant='serif'] .editor,
+html[data-variant='serif'] .preview {
+  font-size: 16.5px;
+  line-height: 2;
+}
+
+/* 衬线模式下加粗权重降低：宋体族在高字重下笔画容易糊成一团 */
+html[data-variant='serif'] .typeflow-editor strong,
+html[data-variant='serif'] .preview strong {
+  font-weight: 600;
+}
+
+/* 紧凑：为信息密度优化，适合对照或快速浏览 */
+html[data-variant='compact'] .typeflow-editor,
+html[data-variant='compact'] .editor,
+html[data-variant='compact'] .preview {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+html[data-variant='compact'] .typeflow-editor h1 { font-size: 1.45em; }
+html[data-variant='compact'] .typeflow-editor h2 { font-size: 1.28em; }
+html[data-variant='compact'] .typeflow-editor h3 { font-size: 1.12em; }
+
+html[data-variant='compact'] .typeflow-editor > * + * {
+  margin-top: 0.35em;
+}
+
+html[data-variant='compact'] .code-block__code,
+html[data-variant='compact'] .typeflow-editor pre {
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+/* 自定义主题导入后的提示标识 */
+.toolbar__group button[data-custom-theme='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------- 图标按钮 ---------- */
+
+.toolbar__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 5px 7px;
+  color: var(--text);
+}
+
+.toolbar__icon svg {
+  display: block;
+}
+
+/* 显示区开关：两幅图标按当前状态二选一，避免用 JS 换 innerHTML */
+[data-action='toggle-preview'] .icon-preview-hidden,
+[data-action='toggle-preview'] .icon-preview-reading {
+  display: none;
+}
+
+[data-action='toggle-preview'][data-preview='hidden'] .icon-preview-visible,
+[data-action='toggle-preview'][data-preview='reading'] .icon-preview-visible {
+  display: none;
+}
+
+[data-action='toggle-preview'][data-preview='hidden'] .icon-preview-hidden {
+  display: block;
+}
+
+[data-action='toggle-preview'][data-preview='reading'] .icon-preview-reading {
+  display: block;
+}
+
+/* ---------- 表格编辑按钮：仅在表格内出现 ---------- */
+
+/*
+ * 行/列操作只在光标位于表格内时才有意义。原先只是把它们禁用（灰显），
+ * 但它们仍占着工具栏宽度、也持续分散注意力。
+ * 直接隐藏既能减少拥挤，也让"当前能做什么"一目了然。
+ */
+.toolbar__group--format[data-in-table='false'] [data-table]:not([data-table='insert']) {
+  display: none;
+}
+
+/* ---------- 文件树空状态 ---------- */
+
+.tree-empty {
+  margin: 14px 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.tree-empty__hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* ================================================================== *
+ * 查找高亮
+ *
+ * 用装饰器渲染而非 DOM 选区：ProseMirror 在视图未聚焦时不会写入选区
+ * （见 editor/search-highlight.ts），而查找框必须持有焦点。
+ * ================================================================== */
+
+.search-hit {
+  background: rgba(250, 204, 21, 0.32);
+  border-radius: 2px;
+  /* 不用 padding/margin：会改变文本排版，导致滚动坐标与匹配位置错位 */
+}
+
+.search-hit--current {
+  background: rgba(249, 115, 22, 0.55);
+  /* 当前项加下划线而不是加粗：加粗会改变字宽，引发整段重排 */
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/*
+ * "跳转到此处"的定位标记。
+ *
+ * 与查找高亮刻意用不同色系：黄色表示"搜索命中的一串位置"，
+ * 蓝色表示"你刚跳到的那一处"。语义不同就要看起来不同。
+ * 用 outline 而非改变背景：不参与文字排版，不会引起重排。
+ */
+.search-locator {
+  background: rgba(37, 99, 235, 0.22);
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+html[data-theme='dark'] .search-locator {
+  background: rgba(96, 165, 250, 0.28);
+}
+
+html[data-theme='dark'] .search-hit {
+  background: rgba(250, 204, 21, 0.24);
+}
+
+html[data-theme='dark'] .search-hit--current {
+  background: rgba(249, 115, 22, 0.45);
+}
+
+/* ================================================================== *
+ * 预览：表格
+ *
+ * 与编辑器内的表格保持同一套视觉语言（同样的描边色、表头底色），
+ * 否则同一份文档在左右两栏里会看起来像两种表格
+ * ================================================================== */
+
+.md-table {
+  width: 100%;
+  /*
+   * 上下边距刻意很小：预览把空行渲染成 <br>，本身已经提供间隔；
+   * 再叠加大 margin 会让表格与标题之间出现明显空档。
+   */
+  margin: 4px 0 10px;
+  border-collapse: collapse;
+  font-size: 0.95em;
+  /* 单元格内容可能很长：允许换行而不是把表格撑出容器 */
+  table-layout: auto;
+}
+
+.md-table th,
+.md-table td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  /* 长 URL 之类的连续串强制换行，避免撑破预览栏 */
+  word-break: break-word;
+}
+
+.md-table th {
+  background: var(--bg-subtle);
+  font-weight: 600;
+}
+
+/* 单元格里的行内代码不继承段落间距 */
+.md-table code {
+  font-size: 0.9em;
+}

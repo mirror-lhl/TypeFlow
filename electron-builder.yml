@@ -1,0 +1,142 @@
+# electron-builder 打包配置
+#
+# 设计原则：**只打包运行必需的东西**。
+# 源码、脚本、文档、node_modules 里的 devDependencies 都不该进安装包——
+# 它们既增大体积，也会扩大攻击面（源码可见、无用的二进制被扫描）。
+
+appId: com.typeflow.app
+productName: TypeFlow
+copyright: Copyright © 2026 TypeFlow
+
+directories:
+  output: release
+  buildResources: build
+
+# Electron 二进制的下载缓存位置。
+#
+# 默认位置是 ~/Library/Caches/electron，在受限环境（沙箱 / 无 GUI 会话的 CI）
+# 下不可创建，报 `EPERM: operation not permitted, mkdir`——而且这个错误发生在
+# **下载完成之后**，看起来像下载失败，容易误判。
+#
+# 因此显式指向可写目录，并同时配置镜像：直连 GitHub Releases 实测约 75 KB/s
+# 且频繁卡死，镜像可达 9 MB/s。
+electronDownload:
+  cache: /tmp/typeflow-electron-cache
+  mirror: https://npmmirror.com/mirrors/electron/
+
+# 只包含运行期真正需要的产物。
+# out/ 是 electron-vite 的三份构建结果（main / preload / renderer）。
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+  # node_modules 交给 electron-builder 按 dependencies 分析。
+  # 本项目只有 electron-updater 是真正的运行时依赖（主进程 require 它），
+  # 其余第三方包全部由 Vite 打进 renderer bundle，因此不会出现在这里。
+  # 下面两条只剔除文档与测试，进一步压缩体积。
+  - '!**/node_modules/**/{test,__tests__,tests,powered-test,example,examples}/**'
+  - '!**/node_modules/**/*.{md,markdown,ts,tsx,map}'
+
+# 把依赖显式声明为空：本项目所有渲染层依赖都已被 Vite 打进 renderer bundle，
+# 主进程只用 Electron 内置模块。让 electron-builder 自动分析 node_modules
+# 会把整个 Prosemirror/KaTeX 依赖树复制进包，白白增加上百 MB。
+# 这是一处刻意的取舍：如果将来主进程引入第三方运行时依赖，必须在此显式列出。
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+
+mac:
+  category: public.app-category.productivity
+  # 声明支持的语言：macOS 的"按 App 设置语言"与商店语言识别都读这两个键
+  extendInfo:
+    CFBundleDevelopmentRegion: en
+    CFBundleLocalizations:
+      - en
+      - zh-Hans
+  # 三档产物：dmg 用于分发、zip 用于 electron-updater 自动更新、
+  # dir 用于本地快速验证（不压缩，构建最快）
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  icon: build/icon.icns
+  # hardenedRuntime 是 Apple 公证的**前置条件**，必须在开发期就打开，
+  # 否则等到申请证书时才会发现签名配置不完整
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # 未配置证书时不做签名（本地验证用）。
+  # 正式发布需移除本行并提供 CSC_LINK / CSC_KEY_PASSWORD，
+  # 或让 electron-builder 自动读取钥匙串里的 Developer ID 证书。
+  identity: null
+  # 公证：需要真实 Apple 账号。通过环境变量启用，未设置时自动跳过。
+  # 启用方式见 docs/L5-RELEASE.md
+  notarize: false
+
+# Mac App Store 专用构建：MAS 版 Electron 运行时 + App Sandbox entitlements，
+# 与站外 mac 构建（entitlements.mac.plist，无沙箱）完全分离。
+# 本地无签名验证：npx electron-builder --mas dir --arm64
+# 正式提交需 "3rd Party Mac Developer" 证书与 provisioning profile，
+# 届时移除 identity: null 并提供证书（见 docs/L5-RELEASE.md）。
+mas:
+  entitlements: build/entitlements.mas.plist
+  entitlementsInherit: build/entitlements.mas.inherit.plist
+  # mas 构建单独解析平台配置，语言声明这里也保留一份，避免依赖继承行为
+  extendInfo:
+    CFBundleDevelopmentRegion: en
+    CFBundleLocalizations:
+      - en
+      - zh-Hans
+  identity: null
+
+dmg:
+  # dmg 内容布局：应用图标 + 指向 /Applications 的快捷方式，
+  # 这是 macOS 用户熟悉的"拖进去就装好"交互
+  contents:
+    - x: 130
+      y: 220
+      type: file
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  # 未配置证书时不签名。正式发布需提供 CSC_LINK / CSC_KEY_PASSWORD
+  # （Windows 代码签名证书，约 $200–400/年）
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: TypeFlow
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: Office
+  synopsis: Markdown editor
+  description: A Markdown editor with live preview, math, diagrams and PDF export.
+  desktop:
+    entry:
+      # 让桌面环境正确关联 .md 文件
+      MimeType: text/markdown;
+
+# 自动更新元数据。
+# provider 用 generic：不绑定某个代码托管平台，指向自建静态目录即可，
+# 将来换到 GitHub Releases 只需改这一处。
+publish:
+  - provider: generic
+    url: https://updates.example.com/typeflow
+    channel: latest

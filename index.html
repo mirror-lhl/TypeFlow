@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; connect-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TypeFlow</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <div class="app">
+      <header class="toolbar">
+        <div class="toolbar__group">
+          <button
+            type="button"
+            class="toolbar__icon"
+            data-action="toggle-sidebar"
+            data-i18n-title="toolbar.toggleSidebar"
+          >
+            <!-- 内联 SVG 而非字符图标：`▤`/`▦` 这类符号在不同字体下字形差异很大，
+                 且本身没有语义，用户看不出它做什么。SVG 用 currentColor 描边，
+                 自动适配明暗主题，也不引入图标字体依赖。 -->
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+              <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/>
+              <line x1="6.4" y1="2.6" x2="6.4" y2="13.4" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+          </button>
+          <button type="button" data-action="open-folder" data-i18n-title="menu.openFolder" data-i18n="toolbar.openFolder"></button>
+        </div>
+
+        <div class="toolbar__group">
+          <button type="button" data-action="new" data-i18n-title="menu.new" data-i18n="toolbar.new"></button>
+          <button type="button" data-action="open" data-i18n-title="menu.open" data-i18n="toolbar.open"></button>
+          <button type="button" data-action="save" data-i18n-title="menu.save" data-i18n="toolbar.save"></button>
+        </div>
+
+        <div class="toolbar__group toolbar__group--format" id="format-group">
+          <button type="button" data-format="heading:1" data-i18n-title="toolbar.heading1">H1</button>
+          <button type="button" data-format="heading:2" data-i18n-title="toolbar.heading2">H2</button>
+          <button type="button" data-format="heading:3" data-i18n-title="toolbar.heading3">H3</button>
+          <span class="toolbar__divider"></span>
+          <button type="button" data-format="bold" data-i18n-title="toolbar.bold"><b>B</b></button>
+          <button type="button" data-format="italic" data-i18n-title="toolbar.italic"><i>I</i></button>
+          <button type="button" data-format="code" data-i18n-title="toolbar.inlineCode">&lt;/&gt;</button>
+          <button type="button" data-format="strikethrough" data-i18n-title="toolbar.strikethrough"><s>S</s></button>
+          <span class="toolbar__divider"></span>
+          <button type="button" data-format="bullet-list" data-i18n-title="toolbar.bulletList">•</button>
+          <button type="button" data-format="ordered-list" data-i18n-title="toolbar.orderedList">1.</button>
+          <button type="button" data-format="blockquote" data-i18n-title="toolbar.blockquote">❝</button>
+          <span class="toolbar__divider"></span>
+          <button type="button" class="toolbar__icon" data-table="insert" data-i18n-title="menu.insertTable">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+              <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+              <line x1="1.6" y1="6.2" x2="14.4" y2="6.2" stroke="currentColor" stroke-width="1.3"/>
+              <line x1="1.6" y1="9.8" x2="14.4" y2="9.8" stroke="currentColor" stroke-width="1.3"/>
+              <line x1="6.1" y1="2.6" x2="6.1" y2="13.4" stroke="currentColor" stroke-width="1.3"/>
+              <line x1="10.3" y1="2.6" x2="10.3" y2="13.4" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+          </button>
+          <button type="button" data-table="add-row-after" data-i18n-title="toolbar.addRowAfter" data-i18n="toolbar.addRowAfterShort">+</button>
+          <button type="button" data-table="add-column-after" data-i18n-title="toolbar.addColumnAfter" data-i18n="toolbar.addColumnAfterShort">+</button>
+          <button type="button" data-table="delete-row" data-i18n-title="toolbar.deleteRow" data-i18n="toolbar.deleteRowShort">−</button>
+          <button type="button" data-table="delete-column" data-i18n-title="toolbar.deleteColumn" data-i18n="toolbar.deleteColumnShort">−</button>
+          <button type="button" data-table="delete-table" data-i18n-title="toolbar.deleteTable" data-i18n="toolbar.deleteTableShort">✕</button>
+        </div>
+
+        <div class="toolbar__group">
+          <button type="button" data-action="toggle-mode" data-i18n-title="menu.toggleMode">
+            源码
+          </button>
+          <button type="button" data-action="toggle-theme" data-i18n-title="menu.toggleTheme" data-i18n="toolbar.lightDark"></button>
+          <button type="button" data-action="theme-variant" data-i18n-title="toolbar.cycleThemeVariant"></button>
+          <button type="button" data-action="theme-import" data-i18n-title="menu.themeImport" data-i18n="toolbar.importTheme"></button>
+          <span class="toolbar__divider"></span>
+          <!-- 这两个按钮的文案是格式名（HTML/PDF），不随界面语言变化，
+               因此只标注 title、不标注 data-i18n；
+               但文字必须显式保留，否则按钮会渲染成空白。 -->
+          <button type="button" data-action="export-html" data-i18n-title="menu.exportHtml">HTML</button>
+          <button type="button" data-action="export-pdf" data-i18n-title="menu.exportPdf">PDF</button>
+        </div>
+
+        <div class="toolbar__spacer"></div>
+      </header>
+
+      <div class="workbench" id="workbench" data-sidebar="visible">
+        <aside class="sidebar" id="sidebar">
+          <nav class="sidebar__tabs" role="tablist">
+            <button type="button" class="sidebar__tab is-active" data-panel="files" data-i18n="toolbar.files"></button>
+            <button type="button" class="sidebar__tab" data-panel="outline" data-i18n="toolbar.outline"></button>
+            <button type="button" class="sidebar__tab" data-panel="search" data-i18n="toolbar.search"></button>
+          </nav>
+
+          <div class="sidebar__body">
+            <section class="sidebar__panel" id="panel-files" data-panel="files">
+              <div class="sidebar__path" id="workspace-path" hidden></div>
+              <div class="sidebar__scroll" id="file-tree"></div>
+            </section>
+
+            <section class="sidebar__panel" id="panel-outline" data-panel="outline" hidden>
+              <div class="sidebar__scroll" id="outline"></div>
+            </section>
+
+            <section class="sidebar__panel" id="panel-search" data-panel="search" hidden>
+              <div class="sidebar__scroll" id="search-panel"></div>
+            </section>
+          </div>
+        </aside>
+
+        <div class="sidebar-resizer" id="sidebar-resizer" role="separator" aria-orientation="vertical"></div>
+
+        <main class="content">
+          <div class="tab-bar" id="tab-bar"></div>
+
+
+          <div class="editor-area" id="editor-area" data-view="split" data-mode="wysiwyg">
+            <!--
+              查找框锚定在**编辑区**内部，而不是内容区或窗口。
+
+              这是层次问题而非数值问题：放在内容区（含标签栏）顶部会压住标签，
+              放在窗口上用固定 top 则依赖"工具栏高度恰好多少"这个假设。
+              编辑区本身位于标签栏之下，锚在它里面就天然不与其上任何东西重叠，
+              也不需要任何硬编码尺寸。
+            -->
+            <div id="finder" class="finder" hidden>
+              <input id="finder-input" class="finder__input" type="text" data-i18n-placeholder="menu.find" />
+              <span id="finder-count" class="finder__count">0/0</span>
+              <button type="button" id="finder-prev" class="finder__button" data-i18n-title="toolbar.previousMatch">↑</button>
+              <button type="button" id="finder-next" class="finder__button" data-i18n-title="toolbar.nextMatch">↓</button>
+              <button type="button" id="finder-close" class="finder__button" data-i18n-title="toolbar.close">×</button>
+            </div>
+            <section class="pane pane--editor">
+              <!--
+                显示区开关长在内容区右上角，而不是工具栏里：
+                分屏时它落在显示区内（点它收起），收起后同一个角落的按钮
+                落在编辑区内（点它恢复）——按钮位置不跳，含义跟着所在区域走。
+                图标画的是当前布局（两栏 / 单栏 / 仅显示区），动作含义交给 title。
+              -->
+              <button type="button" class="pane-toggle" data-action="toggle-preview" data-preview="visible">
+                <svg class="icon-preview-visible" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+                  <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+                  <line x1="8.6" y1="2.6" x2="8.6" y2="13.4" stroke="currentColor" stroke-width="1.3"/>
+                </svg>
+                <svg class="icon-preview-hidden" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+                  <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+                </svg>
+                <svg class="icon-preview-reading" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+                  <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+                  <line x1="4.4" y1="6.4" x2="11.6" y2="6.4" stroke="currentColor" stroke-width="1.3"/>
+                  <line x1="4.4" y1="9.6" x2="11.6" y2="9.6" stroke="currentColor" stroke-width="1.3"/>
+                </svg>
+              </button>
+              <div id="wysiwyg" class="wysiwyg-host"></div>
+              <textarea
+                id="raw-editor"
+                class="editor"
+                spellcheck="false"
+                autocomplete="off"
+                autocapitalize="off"
+                hidden
+              ></textarea>
+            </section>
+            <section class="pane pane--preview" id="preview-pane">
+              <button type="button" class="pane-toggle" data-action="toggle-preview" data-preview="visible">
+                <svg class="icon-preview-visible" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+                  <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+                  <line x1="8.6" y1="2.6" x2="8.6" y2="13.4" stroke="currentColor" stroke-width="1.3"/>
+                </svg>
+                <svg class="icon-preview-hidden" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+                  <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+                </svg>
+                <svg class="icon-preview-reading" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+                  <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+                  <line x1="4.4" y1="6.4" x2="11.6" y2="6.4" stroke="currentColor" stroke-width="1.3"/>
+                  <line x1="4.4" y1="9.6" x2="11.6" y2="9.6" stroke="currentColor" stroke-width="1.3"/>
+                </svg>
+              </button>
+              <article id="preview" class="preview" aria-live="polite"></article>
+            </section>
+
+            <!--
+              只读查看器（PDF / HTML / 图片）。
+
+              与两个 pane 平级，而不是塞进 pane 里：查看会话没有"源码 / 预览"
+              这组概念，也不需要分屏。`data-view="viewer"` 时 CSS 隐藏两个 pane。
+            -->
+            <section class="viewer" id="viewer" hidden></section>
+          </div>
+        </main>
+      </div>
+
+      <footer class="statusbar">
+        <span id="status-message" class="status-message" data-i18n="status.ready"></span>
+        <span class="statusbar__spacer"></span>
+        <span id="status-tabs" class="status-chip">0</span>
+        <span id="status-stats" class="status-stats">0 · 0</span>
+        <span id="status-eol" class="status-chip">LF</span>
+        <span id="status-encoding" class="status-chip">UTF-8</span>
+        <span id="status-platform" class="status-chip">—</span>
+      </footer>
+    </div>
+
+
+    <script type="module" src="/src/renderer/main.ts"></script>
+  </body>
+</html>
