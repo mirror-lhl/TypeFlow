@@ -20,10 +20,14 @@ jobs:
     name: 验证（${{ matrix.os }}）
     runs-on: ${{ matrix.os }}
     strategy:
-      # 一个平台失败不应取消其他平台——否则无法知道问题是否平台特有
       fail-fast: false
+      # 只验证 macOS：本项目只分发 macOS，另两个平台既不出包也不支持。
+      # 之前跑三平台时两个非目标平台稳定失败（Windows 的 jsdom 环境差异、
+      # Linux 无显示服务起不了 Electron），红的原因与交付物无关——
+      # 这会把 CI 训练成"看到红也忽略"，比没有 CI 更糟。
+      # 将来真要支持其它平台，把对应 os 加回来并修好该平台的失败。
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -61,17 +65,8 @@ jobs:
         run: npm run test:input-rules
 
       - name: 应用启动自检
-        shell: bash
-        run: |
-          # Linux 无声卡/显示服务，必须用 xvfb 提供虚拟显示；
-          # macOS 与 Windows 的 runner 自带可用的显示环境。
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq xvfb
-            xvfb-run --auto-servernum npm run smoke
-          else
-            npm run smoke
-          fi
+        # macOS runner 自带可用显示环境，直接跑真实 Electron
+        run: npm run smoke
 
       - name: 上传自检日志
         # 失败时才需要日志，成功时上传只会浪费存储
@@ -98,12 +93,6 @@ jobs:
           - os: macos-latest
             target: --mac
             artifact: mac
-          - os: ubuntu-latest
-            target: --linux
-            artifact: linux
-          - os: windows-latest
-            target: --win
-            artifact: win
 
     steps:
       - uses: actions/checkout@v4
