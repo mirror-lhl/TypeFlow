@@ -155,6 +155,12 @@ export interface Messages {
     fileCount: string
     showingFirst: string
     limitReached: string
+    newFileHere: string
+    newFolderHere: string
+    newFileAtRoot: string
+    newFolderAtRoot: string
+    renameHere: string
+    deleteHere: string
   }
   update: {
     /** App Store 版：更新由商店统一分发 */
@@ -378,7 +384,13 @@ const zhCN: Messages = {
     matchCount: '处匹配',
     fileCount: '个文件',
     showingFirst: '显示前',
-    limitReached: '（已达上限，结果可能不完整）'
+    limitReached: '（已达上限，结果可能不完整）',
+    newFileHere: '在此新建文件',
+    newFolderHere: '在此新建文件夹',
+    newFileAtRoot: '在工作区根目录新建文件',
+    newFolderAtRoot: '在工作区根目录新建文件夹',
+    renameHere: '重命名',
+    deleteHere: '删除'
   },
   update: {
     masManaged: 'App Store 版由 App Store 统一更新',
@@ -600,7 +612,13 @@ const enUS: Messages = {
     matchCount: 'matches',
     fileCount: 'files',
     showingFirst: 'Showing first',
-    limitReached: ' (limit reached, results may be incomplete)'
+    limitReached: ' (limit reached, results may be incomplete)',
+    newFileHere: 'New file here',
+    newFolderHere: 'New folder here',
+    newFileAtRoot: 'New file in workspace root',
+    newFolderAtRoot: 'New folder in workspace root',
+    renameHere: 'Rename',
+    deleteHere: 'Delete'
   },
   update: {
     masManaged: 'App Store builds are updated through the App Store',

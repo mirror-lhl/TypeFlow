@@ -24,6 +24,8 @@ export interface FileTreeCallbacks {
 export interface FileTreeView {
   /** 语言切换后重绘自绘文案（空状态不在 data-i18n 标注体系里）。 */
   refreshLocaleText(): void
+  /** 在指定目录开始新建（默认根目录） */
+  beginCreate(kind: 'create-file' | 'create-directory', parentDirectory?: string): void
   render(tree: WorkspaceTree): void
   setActiveFile(filePath: string | null): void
   revealPath(filePath: string): void
@@ -137,6 +139,23 @@ export function createFileTreeView(
     if (!root) return
 
     const fragment = document.createDocumentFragment()
+
+    /**
+     * 根级新建：输入行放在列表最前。
+     *
+     * 工作区根目录**不渲染成行**，所以没有"文件夹子项之后"可以依附；
+     * 原先根级根本没有入口。放在最前紧贴路径栏，位置可预期，
+     * 且 buildPendingRow 会把它滚进视口。
+     */
+    if (
+      pending !== null &&
+      pending.kind !== 'rename' &&
+      pending.parentDirectory === root.path
+    ) {
+      pendingPlaced = true
+      fragment.appendChild(buildPendingRow(pending, 0))
+    }
+
     for (const child of root.children ?? []) {
       renderNode(child, 0, fragment)
     }
@@ -239,12 +258,12 @@ export function createFileTreeView(
 
     if (node.isDirectory) {
       actions.append(
-        makeButton('+', '在此新建文件', () => {
+        makeButton('+', messages().panel.newFileHere, () => {
           expanded.add(node.path)
           pending = { kind: 'create-file', parentDirectory: node.path }
           render()
         }),
-        makeButton('⊞', '在此新建文件夹', () => {
+        makeButton('⊞', messages().panel.newFolderHere, () => {
           expanded.add(node.path)
           pending = { kind: 'create-directory', parentDirectory: node.path }
           render()
@@ -253,11 +272,11 @@ export function createFileTreeView(
     }
 
     actions.append(
-      makeButton('✎', '重命名', () => {
+      makeButton('✎', messages().panel.renameHere, () => {
         pending = { kind: 'rename', targetPath: node.path, isDirectory: node.isDirectory }
         render()
       }),
-      makeButton('✕', '删除', () => void callbacks.onDelete(node.path))
+      makeButton('✕', messages().panel.deleteHere, () => void callbacks.onDelete(node.path))
     )
 
     return actions
@@ -389,6 +408,20 @@ export function createFileTreeView(
     refreshLocaleText(): void {
       applyEmptyText()
     },
+    /**
+     * 在指定目录下开始新建（默认工作区根目录）。
+     *
+     * 供侧栏顶部的「+」「⊞」按钮调用——根目录不是可点击的树行，
+     * 无法像子文件夹那样从行内按钮发起。
+     */
+    beginCreate(kind: 'create-file' | 'create-directory', parentDirectory?: string): void {
+      const target = parentDirectory ?? root?.path
+      if (!target) return
+      expanded.add(target)
+      pending = { kind, parentDirectory: target }
+      render()
+    },
+
     render(tree: WorkspaceTree): void {
       // 语言可能在运行中切换，空状态文案需随之更新
       applyEmptyText()

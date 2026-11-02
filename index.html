@@ -95,7 +95,13 @@
 
           <div class="sidebar__body">
             <section class="sidebar__panel" id="panel-files" data-panel="files">
-              <div class="sidebar__path" id="workspace-path" hidden></div>
+              <div class="sidebar__path" id="workspace-path" hidden>
+                <span class="sidebar__path-text" id="workspace-path-text"></span>
+                <span class="sidebar__path-actions">
+                  <button type="button" class="tree-action" id="workspace-new-file" data-i18n-title="panel.newFileAtRoot">+</button>
+                  <button type="button" class="tree-action" id="workspace-new-folder" data-i18n-title="panel.newFolderAtRoot">⊞</button>
+                </span>
+              </div>
               <div class="sidebar__scroll" id="file-tree"></div>
             </section>
 

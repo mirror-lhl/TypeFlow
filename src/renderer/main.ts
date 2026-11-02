@@ -83,6 +83,9 @@ const dom = {
   sidebar: requireElement<HTMLElement>('sidebar'),
   sidebarResizer: requireElement<HTMLElement>('sidebar-resizer'),
   workspacePath: requireElement<HTMLElement>('workspace-path'),
+  workspacePathText: requireElement<HTMLElement>('workspace-path-text'),
+  workspaceNewFile: requireElement<HTMLButtonElement>('workspace-new-file'),
+  workspaceNewFolder: requireElement<HTMLButtonElement>('workspace-new-folder'),
   fileTreeHost: requireElement<HTMLElement>('file-tree'),
   outlineHost: requireElement<HTMLElement>('outline'),
   searchHost: requireElement<HTMLElement>('search-panel'),
@@ -863,7 +866,8 @@ async function openWorkspace(): Promise<void> {
 
 async function setWorkspace(directory: string): Promise<void> {
   state.workspacePath = directory
-  dom.workspacePath.textContent = directory
+  // 路径写在子节点里：外层容器已改为纵向排列"路径 + 新建按钮"
+  dom.workspacePathText.textContent = directory
   dom.workspacePath.title = directory
   // 路径栏只在有路径可显示时才出现：空工作区时它与文件树空状态重复
   dom.workspacePath.hidden = false
@@ -2699,6 +2703,17 @@ async function init(): Promise<void> {
     onError: (message) => setMessage(message, 'error')
   })
 
+  /**
+   * 工作区根目录不是可点击的树行，无法像子文件夹那样从行内按钮新建。
+   * 入口放在路径栏右侧，作用于根目录。
+   */
+  dom.workspaceNewFile.addEventListener('click', () => {
+    fileTree.beginCreate('create-file')
+  })
+  dom.workspaceNewFolder.addEventListener('click', () => {
+    fileTree.beginCreate('create-directory')
+  })
+
   outlineView = createOutlineView(dom.outlineHost, (item) => {
     const current = editor()
     if (!current) return
@@ -4261,7 +4276,9 @@ async function runSmokeTest(): Promise<void> {
         }
 
         for (const element of document.querySelectorAll<HTMLElement>(
-          '.toolbar button, .sidebar__tab, .finder button'
+          // .tree-action 是文件树上的 +/⊞/✎/✕：标题曾硬编码中文，
+          // 只有切到英文并悬停才会暴露，纳入检查免得再漏
+          '.toolbar button, .sidebar__tab, .finder button, .tree-action'
         )) {
           push(
             element.dataset.action ?? element.dataset.table ?? element.dataset.format ?? element.className,
@@ -5947,6 +5964,87 @@ async function runSmokeTest(): Promise<void> {
             // 收起：避免悬空输入行影响后续断言
             findRowByName('notes')?.querySelector<HTMLElement>('.tree-label')?.click()
             await nextFrame()
+
+          /**
+           * 根目录新建：入口在路径栏右侧。
+           *
+           * 工作区根目录**不渲染成树行**，所以子文件夹那套行内按钮覆盖不到顶层——
+           * 这是用户报"顶层没法新建"的直接原因。
+           */
+          dom.workspaceNewFile.click()
+          await nextFrame()
+
+          const rootRows = Array.from(list.querySelectorAll<HTMLElement>('.tree-row'))
+          const rootPendingIndex = rootRows.findIndex((row) =>
+            row.classList.contains('tree-row--pending')
+          )
+          const rootPendingRow = rootRows[rootPendingIndex]
+          const rootDepth = rootPendingRow
+            ? Number(rootPendingRow.style.getPropertyValue('--tree-depth') || '0')
+            : -1
+
+          check(
+            '路径栏提供根级新建入口',
+            rootPendingIndex === 0 && rootDepth === 0,
+            `输入行下标=${rootPendingIndex}（期望 0）缩进=${rootDepth}（期望 0）`
+          )
+
+          // Esc 取消，避免悬挂输入行
+          rootPendingRow
+            ?.querySelector<HTMLInputElement>('.tree-input')
+            ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          await nextFrame()
+
+          check(
+            '根级新建可取消',
+            list.querySelectorAll('.tree-row--pending').length === 0,
+            `残留 ${list.querySelectorAll('.tree-row--pending').length} 行`
+          )
+
+          /**
+           * 端到端：根级新建必须真的落盘。
+           *
+           * 上面只验证了"输入行出现在根级"，但 `beginCreate` 依赖 `root.path`——
+           * 若根路径为空会静默早退。这里真建一个文件再清理，
+           * 确认目录参数传对了。
+           */
+          {
+            const probeName = 'root-e2e-probe.md'
+            const probePath = `${workspace}/${probeName}`
+
+            dom.workspaceNewFile.click()
+            await nextFrame()
+
+            const probeInput = list.querySelector<HTMLInputElement>(
+              '.tree-row--pending .tree-input'
+            )
+            check('根级新建出现输入框', probeInput !== null, probeInput ? '存在' : '未找到')
+
+            if (probeInput) {
+              probeInput.value = probeName
+              probeInput.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+              )
+              // 创建包含一次真实落盘 + 一次树刷新 + 打开文档，多等一帧
+              await nextFrame()
+              await nextFrame()
+
+              const afterCreate = await api.workspace.readTree(workspace)
+              const created = findNode(afterCreate.root, probeName)
+              check(
+                '根级新建文件真的落盘',
+                created !== undefined && !created.isDirectory,
+                probeName
+              )
+
+              // 清理：关掉标签再删文件，避免影响后续断言
+              const probeSession = store.find(probePath)
+              if (probeSession) await handleCloseTab(probeSession.id)
+              await api.workspace.remove(workspace, probePath)
+              await refreshWorkspaceTree()
+              await nextFrame()
+            }
+          }
           }
         }
       }

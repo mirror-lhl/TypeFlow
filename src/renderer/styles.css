@@ -796,15 +796,33 @@ body.is-resizing {
 }
 
 .sidebar__path {
-  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
   font-size: 11px;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
+}
+
+/*
+ * 路径文本保留 `direction: rtl` 的省略号效果：
+ * 路径过长时省略号出现在**开头**，用户能看到真正的末级目录名。
+ */
+.sidebar__path-text {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   direction: rtl;
   text-align: left;
+}
+
+.sidebar__path-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
 }
 
 .sidebar__scroll {
